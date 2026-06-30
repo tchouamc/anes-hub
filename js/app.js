@@ -100,8 +100,8 @@ const App = (() => {
       renderAll();
       toast('Synced with Notion');
     } catch (e) {
-      console.error(e);
-      toast('Sync failed — check Settings to verify your connection.');
+      console.error('Sync error:', e);
+      toast('Sync failed: ' + (e.message || 'unknown error') + ' — see console for details');
     }
   }
 
@@ -122,13 +122,17 @@ const App = (() => {
 
   // ── Render orchestration ──
   function renderAll() {
-    renderDashboard();
-    renderCalendar();
-    renderReferences();
-    renderRequirementsGoals();
-    renderCases();
-    renderJournalSidebar();
-    renderSettings();
+    safeRender(renderDashboard);
+    safeRender(renderCalendar);
+    safeRender(renderReferences);
+    safeRender(renderRequirementsGoals);
+    safeRender(renderCases);
+    safeRender(renderJournalSidebar);
+    safeRender(renderSettings);
+  }
+
+  function safeRender(fn) {
+    try { fn(); } catch (e) { console.error(`Render error in ${fn.name}:`, e); }
   }
 
   // ════════ DASHBOARD ════════
