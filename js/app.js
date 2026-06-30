@@ -415,6 +415,31 @@ const App = (() => {
     renderCalendar();
   }
 
+  function openCalAddForm() {
+    document.getElementById('cal-add-form').classList.toggle('hidden');
+  }
+
+  async function addGoalFromCalendar() {
+    const text = document.getElementById('cal-goal-text').value.trim();
+    if (!text) return;
+    const goal = {
+      text,
+      cat: document.getElementById('cal-goal-type').value,
+      due: document.getElementById('cal-goal-due').value.trim(),
+      done: false,
+      notes: ''
+    };
+    state.requirements.push(goal);
+    document.getElementById('cal-goal-text').value = '';
+    document.getElementById('cal-goal-due').value = '';
+    document.getElementById('cal-add-form').classList.add('hidden');
+    renderAll();
+    saveCache();
+    toast('Saved — pushing to Notion…');
+    try { goal._id = await createRequirement(goal); saveCache(); toast('Saved to Notion'); }
+    catch { toast('Saved locally — sync to push to Notion'); }
+  }
+
   function selectCalDay(dStr) {
     document.getElementById('day-detail-date').textContent = new Date(dStr).toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' });
     const body = document.getElementById('day-detail-body');
@@ -838,7 +863,7 @@ const App = (() => {
   // ── Public API ──
   return {
     init, saveToken, logout, syncAll,
-    switchPanel, selectCalDay, calPrevMonth, calNextMonth, calGoToday,
+    switchPanel, selectCalDay, calPrevMonth, calNextMonth, calGoToday, openCalAddForm, addGoalFromCalendar,
     setRefTab, openResourceForm, addResource, deleteResource, filterResTopic,
     openGoalForm, openEPAForm, addGoal, toggleGoal, addEPA, logEPAInstance,
     toggleCaseRow, filterCaseRotation, toggleCaseTag,
