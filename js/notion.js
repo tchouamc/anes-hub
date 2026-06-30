@@ -1,7 +1,11 @@
 // ── Notion API Layer ──
 
 const NOTION_VERSION = '2022-06-28';
-const PROXY = 'https://corsproxy.io/?';
+
+// corsproxy.io requires the target URL as a `url` query param, fully encoded.
+function proxied(url) {
+  return 'https://corsproxy.io/?url=' + encodeURIComponent(url);
+}
 
 const DB = {
   requirements: 'bbe0b489-2326-4134-8d6c-1630b5306419',
@@ -18,13 +22,13 @@ function notionHeaders() {
 }
 
 async function notionGet(path) {
-  const r = await fetch(PROXY + encodeURIComponent(`https://api.notion.com${path}`), { headers: notionHeaders() });
+  const r = await fetch(proxied(`https://api.notion.com${path}`), { headers: notionHeaders() });
   if (!r.ok) throw new Error(`Notion GET ${path} → ${r.status}`);
   return r.json();
 }
 
 async function notionPost(path, body) {
-  const r = await fetch(PROXY + encodeURIComponent(`https://api.notion.com${path}`), {
+  const r = await fetch(proxied(`https://api.notion.com${path}`), {
     method: 'POST', headers: notionHeaders(), body: JSON.stringify(body)
   });
   if (!r.ok) { const t = await r.text(); throw new Error(`Notion POST ${path} → ${r.status}: ${t}`); }
@@ -32,7 +36,7 @@ async function notionPost(path, body) {
 }
 
 async function notionPatch(path, body) {
-  const r = await fetch(PROXY + encodeURIComponent(`https://api.notion.com${path}`), {
+  const r = await fetch(proxied(`https://api.notion.com${path}`), {
     method: 'PATCH', headers: notionHeaders(), body: JSON.stringify(body)
   });
   if (!r.ok) throw new Error(`Notion PATCH ${path} → ${r.status}`);
@@ -153,7 +157,7 @@ async function createResource(res) {
 }
 
 async function validateToken(token) {
-  const r = await fetch(PROXY + encodeURIComponent('https://api.notion.com/v1/users/me'), {
+  const r = await fetch(proxied('https://api.notion.com/v1/users/me'), {
     headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': NOTION_VERSION }
   });
   return r.ok;
