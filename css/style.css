@@ -583,3 +583,9 @@ textarea { resize: vertical; line-height: 1.5; }
   font-size: 12.5px; color: var(--text-muted); cursor: pointer;
 }
 .datepicker-clear-btn:hover { color: var(--text-secondary); }
+
+/* ───── Resource notes expansion ───── */
+.resource-row-expandable { cursor: pointer; }
+.resource-row-expandable:hover { border-color: var(--border-strong); }
+.res-notes-body { display: none; font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); white-space: pre-wrap; }
+.resource-row.expanded .res-notes-body { display: block; }

@@ -467,12 +467,17 @@
 
         <div class="add-form hidden" id="resource-form">
           <div class="form-row">
-            <input type="text" id="res-name" placeholder="Resource name" class="input-grow">
+            <input type="text" id="res-name" placeholder="Resource name or title" class="input-grow">
             <select id="res-type"><option>PDF</option><option>Video</option><option>Link</option><option>Note</option><option>Drug</option><option>Mnemonic</option></select>
           </div>
           <div class="form-row">
             <input type="text" id="res-url" placeholder="URL or iCloud path (optional)" class="input-grow">
             <input type="text" id="res-topic" placeholder="Topic / rotation" class="input-grow">
+          </div>
+          <div class="form-row">
+            <textarea id="res-notes" class="input-grow" rows="3" placeholder="Description, notes, things learned, mnemonic text, drug doses, key pearls… Add as much detail as you want."></textarea>
+          </div>
+          <div class="form-row">
             <button class="btn-primary" onclick="App.addResource()">Save</button>
           </div>
         </div>

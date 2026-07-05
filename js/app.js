@@ -690,11 +690,13 @@ const App = (() => {
       type: document.getElementById('res-type').value,
       url: document.getElementById('res-url').value.trim(),
       topic: document.getElementById('res-topic').value.trim(),
+      notes: document.getElementById('res-notes').value.trim(),
     };
     state.resources.unshift(res);
     document.getElementById('res-name').value = '';
     document.getElementById('res-url').value = '';
     document.getElementById('res-topic').value = '';
+    document.getElementById('res-notes').value = '';
     document.getElementById('resource-form').classList.add('hidden');
     renderReferences();
     saveCache();
@@ -731,14 +733,15 @@ const App = (() => {
     list.innerHTML = filtered.map((r) => {
       const cls = typeClass[r.type] || 'link';
       const path = icons[r.type] || icons.Link;
-      return `<div class="resource-row">
+      return `<div class="resource-row ${r.notes ? 'resource-row-expandable' : ''}" ${r.notes ? `onclick="this.classList.toggle('expanded')"` : ''}>
         <div class="res-icon ${cls}"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path.split(' M').map((p,i)=>`<path d="${i===0?p:'M'+p}"/>`).join('')}</svg></div>
         <div class="res-info">
-          ${r.url ? `<a href="${escAttr(r.url)}" target="_blank" class="res-name">${esc(r.name)}</a>` : `<div class="res-name">${esc(r.name)}</div>`}
-          <div class="res-meta">${esc(r.topic || 'General')}</div>
+          ${r.url ? `<a href="${escAttr(r.url)}" target="_blank" class="res-name" onclick="event.stopPropagation()">${esc(r.name)}</a>` : `<div class="res-name">${esc(r.name)}</div>`}
+          <div class="res-meta">${esc(r.topic || 'General')}${r.notes ? ' · <span style="color:var(--accent); font-weight:500;">Has notes</span>' : ''}</div>
+          ${r.notes ? `<div class="res-notes-body">${esc(r.notes)}</div>` : ''}
         </div>
         <span class="res-type-pill ${cls}">${esc(r.type)}</span>
-        <button class="del-btn" onclick="App.deleteResource(${state.resources.indexOf(r)})">×</button>
+        <button class="del-btn" onclick="event.stopPropagation(); App.deleteResource(${state.resources.indexOf(r)})">×</button>
       </div>`;
     }).join('');
   }

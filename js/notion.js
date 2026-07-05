@@ -141,17 +141,33 @@ async function fetchResources() {
     type: p.properties['Type']?.select?.name || 'Link',
     url: p.properties['URL']?.url || '',
     topic: txt(p.properties['Topic']),
-  })).filter(r => r.name);
+    // Notes stored in Topic field after a delimiter
+    notes: (() => {
+      const t = txt(p.properties['Topic']);
+      const sep = t.indexOf('||notes:');
+      return sep >= 0 ? t.slice(sep + 8).trim() : '';
+    })(),
+    // Clean topic without notes
+    topicClean: (() => {
+      const t = txt(p.properties['Topic']);
+      const sep = t.indexOf('||notes:');
+      return sep >= 0 ? t.slice(0, sep).trim() : t;
+    })(),
+  })).filter(r => r.name).map(r => ({ ...r, topic: r.topicClean }));
 }
 
 async function createResource(res) {
+  // Store notes in Topic field using a delimiter: "topic||notes:actual notes"
+  const topicWithNotes = res.notes
+    ? `${res.topic || ''}||notes:${res.notes}`
+    : (res.topic || '');
   const page = await notionPost('/v1/pages', {
     parent: { database_id: DB.resources },
     properties: {
       'Name': { title: [{ text: { content: res.name } }] },
       'Type': { select: { name: res.type } },
       'URL': { url: res.url || null },
-      'Topic': { rich_text: [{ text: { content: res.topic || '' } }] },
+      'Topic': { rich_text: [{ text: { content: topicWithNotes } }] },
     }
   });
   return page.id;
