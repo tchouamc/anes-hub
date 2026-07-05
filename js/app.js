@@ -12,7 +12,7 @@ const App = (() => {
     cases: [],
     resources: [],
     journalEntries: [], // {date, text, savedAt}
-    habitLog: [],       // {date, topics: []}
+    habitLog: [],
     dailyWins: { date: '', wins: ['', '', ''] },
     calMonth: new Date().getMonth(),
     calYear: new Date().getFullYear(),
@@ -22,6 +22,7 @@ const App = (() => {
     selectedCaseProcs: ['All'],
     overlayTags: [],
     overlayProcs: [],
+    trainingStage: 'Foundations of Discipline',
   };
 
   // ── Init ──
@@ -89,15 +90,24 @@ const App = (() => {
   // ── Sync ──
   async function syncAll() {
     try {
-      const [reqs, cases, resources] = await Promise.all([fetchRequirements(), fetchCases(), fetchResources()]);
+      const [reqs, cases, resources, dailyGoals] = await Promise.all([
+        fetchRequirements(), fetchCases(), fetchResources(), fetchDailyGoals()
+      ]);
       state.epas = reqs.filter(r => r.cat === 'EPA').map(epaFromRequirement);
       state.requirements = reqs.filter(r => r.cat !== 'EPA');
       state.cases = cases;
-      // Resources of type Journal map to journal entries; everything else stays in resources
       state.journalEntries = resources.filter(r => r.type === 'Journal').map(r => ({
         _id: r._id, date: r.topic, text: r.name, savedAt: r.url || ''
       })).sort((a,b) => b.date.localeCompare(a.date));
       state.resources = resources.filter(r => r.type !== 'Journal');
+      // Merge daily goals from Notion into winsLog — Notion is source of truth
+      if (!state.winsLog) state.winsLog = {};
+      dailyGoals.forEach(g => {
+        state.winsLog[g.date] = state.winsLog[g.date] || { notionId: g._id, wins: [g.goal1, g.goal2, g.goal3] };
+        state.winsLog[g.date].notionId = g._id;
+        // Only overwrite wins if Notion has content (don't overwrite local unsaved edits)
+        if (g.goal1 || g.goal2 || g.goal3) state.winsLog[g.date].wins = [g.goal1, g.goal2, g.goal3];
+      });
       saveCache();
       renderAll();
       toast('Synced with Notion');
@@ -155,30 +165,56 @@ const App = (() => {
     const pct = totalTarget ? totalDone / totalTarget : 0;
     document.getElementById('epa-ring-fill').setAttribute('stroke-dashoffset', circumference - circumference * pct);
 
-    // mini rings — show 3 priority EPAs for current rotation
-    const matchKey = Object.keys(ROTATION_EPA_MAP).find(k => (state.rotation||'').toLowerCase().includes(k.toLowerCase())) || 'General';
-    const priorityCodes = (ROTATION_EPA_MAP[matchKey] || []).slice(0, 3);
+    // mini rings — show 3 incomplete EPAs from current training stage
+    const stageForRings = state.trainingStage || 'Foundations of Discipline';
+    const stageEPAsForRings = EPA_MASTER.filter(e => e.stage === stageForRings && e.target !== null);
+    const incompleteForRings = stageEPAsForRings.filter(e => (getEPAProgress(e.code).count || 0) < e.target).slice(0, 3);
     const miniColors = ['#6B7FD8', '#0F6E56', '#B8860B'];
-    const miniHtml = priorityCodes.map((code, i) => {
-      const master = EPA_MASTER.find(e => e.code === code);
-      if (!master) return '';
-      const p = master.target ? Math.min(1, (getEPAProgress(code).count || 0) / master.target) : 0;
+    const miniHtml = incompleteForRings.map((e, i) => {
+      const p = e.target ? Math.min(1, (getEPAProgress(e.code).count || 0) / e.target) : 0;
       const circ = 69.1;
       return `<div class="mini-ring-row">
         <svg class="mini-ring-svg" viewBox="0 0 28 28">
           <circle cx="14" cy="14" r="11" fill="none" stroke="#ECEAE5" stroke-width="4"/>
           <circle cx="14" cy="14" r="11" fill="none" stroke="${miniColors[i]}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${circ - circ * p}" transform="rotate(-90 14 14)"/>
         </svg>
-        <span class="mini-ring-label">${esc(code)} — ${esc(master.name.slice(0, 38))}…</span>
+        <span class="mini-ring-label">${esc(e.code)} — ${esc(e.name.slice(0, 38))}…</span>
       </div>`;
     }).join('');
-    document.getElementById('mini-rings').innerHTML = miniHtml || '<div class="empty-state-mini">Set your rotation in Settings to see priority EPAs.</div>';
+    document.getElementById('mini-rings').innerHTML = miniHtml || '<div class="empty-state-mini">All EPAs for this stage complete.</div>';
 
     renderStreak();
     renderWins();
     renderHabit();
     renderUpcoming('upcoming-list');
     renderMiniCalendar();
+    renderDashboardCasesToday();
+  }
+
+  function renderDashboardCasesToday() {
+    const el = document.getElementById('dash-cases-today');
+    if (!el) return;
+    const today = fmtDate(new Date());
+    const todayCases = state.cases.filter(c => normalizeDate(c.date) === today);
+    if (!todayCases.length) {
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = `
+      <div style="background:rgba(0,0,0,0.18); border-radius:var(--radius); padding:12px 14px;">
+        <div class="dash-cases-header">Today's cases — ${todayCases.length} logged</div>
+        ${todayCases.map((c) => {
+          const idx = state.cases.indexOf(c);
+          const tags = [...(c.tags||[]), ...(c.procs||[])].slice(0, 4);
+          return `<div class="dash-case-banner" onclick="App.switchPanel('cases'); setTimeout(() => { App.expandAndEditCase(${idx}); }, 200);">
+            <div class="dash-case-banner-title">${esc(c.title)}</div>
+            <div class="dash-case-banner-meta">
+              ${c.rotation ? `<span>${esc(c.rotation)}</span>` : ''}
+              ${tags.map(t => `<span class="dash-case-banner-tag">${esc(t)}</span>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
   }
 
   // ── Streak calculation (based on habitLog dates) ──
@@ -237,19 +273,71 @@ const App = (() => {
   // ── 3 wins ──
   function renderWins() {
     const today = fmtDate(new Date());
-    if (state.dailyWins.date !== today) state.dailyWins = { date: today, wins: ['', '', ''] };
+    const tomorrow = fmtDate(new Date(Date.now() + 86400000));
+    const sel = document.getElementById('wins-date-select');
+    const targetDate = sel && sel.value === 'tomorrow' ? tomorrow : today;
+    if (!state.winsLog) state.winsLog = {};
+    if (!state.winsLog[targetDate]) state.winsLog[targetDate] = { wins: ['', '', ''], notionId: null };
+    // Support both old array format and new object format
+    const entry = state.winsLog[targetDate];
+    const wins = Array.isArray(entry) ? entry : (entry.wins || ['', '', '']);
+    state.dailyWins = { date: targetDate, wins };
+    const display = document.getElementById('wins-date-display');
+    if (display) {
+      const label = targetDate === today ? 'For today' : 'For tomorrow — ' + new Date(targetDate + 'T12:00:00').toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' });
+      display.textContent = label;
+    }
     const el = document.getElementById('wins-list');
-    el.innerHTML = state.dailyWins.wins.map((w, i) => `
+    if (!el) return;
+    el.innerHTML = wins.map((w, i) => `
       <div class="win-input-row">
         <div class="win-num">${i+1}</div>
-        <input type="text" class="win-text-input" value="${escAttr(w)}" placeholder="What would make today a win?" oninput="App.updateWin(${i}, this.value)">
+        <input type="text" class="win-text-input" value="${escAttr(w)}" placeholder="What would make this day a win?" oninput="App.updateWin(${i}, this.value)">
       </div>
     `).join('');
   }
 
+  function setWinsDate(val) {
+    renderWins();
+  }
+
+  let winsSyncTimer;
   function updateWin(i, val) {
-    state.dailyWins.wins[i] = val;
+    const sel = document.getElementById('wins-date-select');
+    const today = fmtDate(new Date());
+    const tomorrow = fmtDate(new Date(Date.now() + 86400000));
+    const targetDate = sel && sel.value === 'tomorrow' ? tomorrow : today;
+    if (!state.winsLog) state.winsLog = {};
+    if (!state.winsLog[targetDate]) state.winsLog[targetDate] = { wins: ['', '', ''], notionId: null };
+    // Support both old array format and new object format
+    const entry = state.winsLog[targetDate];
+    if (Array.isArray(entry)) state.winsLog[targetDate] = { wins: entry, notionId: null };
+    state.winsLog[targetDate].wins[i] = val;
+    state.dailyWins = { date: targetDate, wins: state.winsLog[targetDate].wins };
     saveCache();
+    // Debounced Notion sync — waits 2s after last keystroke
+    clearTimeout(winsSyncTimer);
+    winsSyncTimer = setTimeout(() => syncWinsToNotion(targetDate), 2000);
+  }
+
+  async function syncWinsToNotion(date) {
+    if (!state.winsLog || !state.winsLog[date]) return;
+    const entry = state.winsLog[date];
+    const wins = Array.isArray(entry) ? entry : entry.wins;
+    const notionId = Array.isArray(entry) ? null : entry.notionId;
+    // Don't sync empty entries
+    if (!wins.some(w => w && w.trim())) return;
+    try {
+      if (notionId) {
+        await updateDailyGoal(notionId, { wins });
+      } else {
+        const id = await createDailyGoal({ date, wins });
+        if (!Array.isArray(state.winsLog[date])) state.winsLog[date].notionId = id;
+        saveCache();
+      }
+    } catch (e) {
+      console.error('Wins sync error:', e);
+    }
   }
 
   // ── Habit tracker ──
@@ -537,6 +625,18 @@ const App = (() => {
     });
     const habit = state.habitLog.find(h => h.date === dStr);
     if (habit) html += `<div class="detail-event-row"><div class="detail-event-dot" style="background:#6B7FD8"></div><div><div class="detail-event-title">Studied</div><div class="detail-event-sub">${esc((habit.topics||[]).join(', ') || 'No topics logged')}</div></div></div>`;
+    // Daily wins for this day
+    const winsEntry = state.winsLog && state.winsLog[dStr];
+    const wins = winsEntry ? (Array.isArray(winsEntry) ? winsEntry : winsEntry.wins) : null;
+    if (wins && wins.some(w => w && w.trim())) {
+      html += `<div class="detail-event-row">
+        <div class="detail-event-dot" style="background:#9B7FD8"></div>
+        <div>
+          <div class="detail-event-title">Daily goals</div>
+          ${wins.filter(w => w && w.trim()).map((w, i) => `<div class="detail-event-sub">${i+1}. ${esc(w)}</div>`).join('')}
+        </div>
+      </div>`;
+    }
     if (!html) html = '<div class="empty-state-mini">Nothing on this day.</div>';
     body.innerHTML = html;
   }
@@ -762,17 +862,54 @@ const App = (() => {
     if (el) el.textContent = done + ' / ' + total + ' complete';
   }
 
+
+  function setTrainingStage(stage) {
+    state.trainingStage = stage;
+    saveCache();
+    renderEPARotationView();
+    renderEPAOverallBadge();
+  }
+
   function renderEPARotationView() {
-    const rotation = state.rotation || '';
-    const matchKey = Object.keys(ROTATION_EPA_MAP).find(k => rotation.toLowerCase().includes(k.toLowerCase())) || 'General';
-    const priorityCodes = ROTATION_EPA_MAP[matchKey] || [];
+    // Sync the dropdown to current state
+    const select = document.getElementById('epa-stage-select');
+    if (select && state.trainingStage) select.value = state.trainingStage;
+
+    const stage = state.trainingStage || 'Foundations of Discipline';
+    const stageColor = STAGE_COLORS[stage] || '#0F6E56';
+    const stageEPAs = EPA_MASTER.filter(e => e.stage === stage);
+
+    // Banner
     const banner = document.getElementById('epa-rotation-banner');
-    if (banner) banner.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Priority EPAs for <strong style="margin-left:4px;">' + esc(rotation || 'your current rotation') + '</strong>';
-    const priorityEPAs = EPA_MASTER.filter(e => priorityCodes.includes(e.code));
+    if (banner) {
+      const done = stageEPAs.filter(e => e.target !== null && (getEPAProgress(e.code).count || 0) >= e.target).length;
+      const total = stageEPAs.filter(e => e.target !== null).length;
+      banner.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span style="color:${stageColor}; font-weight:600;">${esc(stage)}</span>
+        <span style="margin-left:auto; font-size:11px; color:var(--text-muted); font-weight:400;">${done} / ${total} complete</span>`;
+    }
+
     const list = document.getElementById('epa-list-rotation');
     if (!list) return;
-    if (!priorityEPAs.length) { list.innerHTML = '<div class="empty-state">No rotation matched. Update your rotation in Settings, or tap "All EPAs" to access the full list.</div>'; return; }
-    list.innerHTML = priorityEPAs.map(e => epaRowHTML(e, true)).join('');
+
+    if (!stageEPAs.length) {
+      list.innerHTML = '<div class="empty-state">No EPAs found for this stage.</div>';
+      return;
+    }
+
+    // Sort: incomplete first, sorted by progress % descending (most progress at top), then complete at bottom
+    const incomplete = stageEPAs.filter(e => {
+      const count = getEPAProgress(e.code).count || 0;
+      return e.target === null || count < e.target;
+    }).sort((a, b) => {
+      const pctA = a.target ? (getEPAProgress(a.code).count || 0) / a.target : 0;
+      const pctB = b.target ? (getEPAProgress(b.code).count || 0) / b.target : 0;
+      return pctB - pctA;
+    });
+    const complete = stageEPAs.filter(e => e.target !== null && (getEPAProgress(e.code).count || 0) >= e.target);
+
+    list.innerHTML = incomplete.map(e => epaRowHTML(e, true)).join('') +
+      (complete.length ? `<div class="goal-sub-heading accomplished" style="margin-top:16px;"><span>Completed</span><span class="goal-sub-count">${complete.length}</span></div>` + complete.map(e => epaRowHTML(e, false)).join('') : '');
   }
 
   function renderEPAAll() {
@@ -917,6 +1054,16 @@ const App = (() => {
           ${c.procs && c.procs.length ? `<div class="case-tags-row">${c.procs.map(p => `<span class="case-tag" style="background:var(--blue-light);color:var(--blue);border-color:var(--blue-light);">${esc(p)}</span>`).join('')}</div>` : ''}
           ${c.pearl ? `<div class="case-detail-label">What I wanted to learn</div><div class="case-detail-text">${esc(c.pearl)}</div>` : ''}
           ${c.drugs ? `<div class="case-detail-label drugs">Drugs / doses</div><div class="case-detail-text">${esc(c.drugs)}</div>` : ''}
+          <div class="case-row-actions">
+            <div class="case-action-btn" onclick="event.stopPropagation(); App.openCaseEdit(${idx})">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4z"/></svg>
+              Edit
+            </div>
+            <div class="case-action-btn delete" onclick="event.stopPropagation(); App.deleteCase(${idx})">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
+              Delete
+            </div>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -924,6 +1071,119 @@ const App = (() => {
 
   function toggleCaseRow(idx) {
     document.getElementById(`case-row-${idx}`).classList.toggle('expanded');
+  }
+
+  function expandAndEditCase(idx) {
+    renderCases();
+    setTimeout(() => {
+      const row = document.getElementById(`case-row-${idx}`);
+      if (row) { row.classList.add('expanded'); row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }, 100);
+  }
+
+  function openCaseEdit(idx) {
+    const c = state.cases[idx];
+    if (!c) return;
+
+    // Expand the row if not already
+    const row = document.getElementById(`case-row-${idx}`);
+    if (row) row.classList.add('expanded');
+
+    // Replace body with editable form
+    const body = row ? row.querySelector('.case-row-body') : null;
+    if (!body) return;
+
+    const tagOptions = ['Airway','Cardiac','Regional','Paeds','OB','Trauma','ICU','Pain'];
+    const procOptions = ['RSI','Epidural','Spinal','CSE','Nerve block','A-line','Central line','TEE','Awake FOI','Video laryngoscopy','TIVA','Gas induction','LMA','Intubation','Arterial line','POCUS','Resuscitation','Transfusion'];
+
+    body.innerHTML = `
+      <div class="case-edit-form">
+        <div class="field-group" style="margin-bottom:12px;">
+          <label class="field-label">Case title</label>
+          <input type="text" class="field-input full" id="edit-title-${idx}" value="${escAttr(c.title)}">
+        </div>
+        <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+          <div class="field-group" style="flex:1; min-width:120px;">
+            <label class="field-label">Rotation / site</label>
+            <input type="text" class="field-input full" id="edit-rotation-${idx}" value="${escAttr(c.rotation || '')}">
+          </div>
+          <div class="field-group" style="flex:1; min-width:100px;">
+            <label class="field-label">Date</label>
+            <input type="text" class="field-input full" id="edit-date-${idx}" value="${escAttr(c.date || '')}">
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+          <label class="field-label">Specialty tags</label>
+          <div class="tag-picker">
+            ${tagOptions.map(t => `<div class="tag-pick-chip edit-tag-chip ${(c.tags||[]).includes(t) ? 'selected' : ''}" data-tag="${escAttr(t)}" onclick="this.classList.toggle('selected')">${esc(t)}</div>`).join('')}
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+          <label class="field-label">Procedure / technique</label>
+          <div class="tag-picker">
+            ${procOptions.map(p => `<div class="proc-pick-chip edit-proc-chip ${(c.procs||[]).includes(p) ? 'selected' : ''}" data-proc="${escAttr(p)}" onclick="this.classList.toggle('selected')">${esc(p)}</div>`).join('')}
+          </div>
+          <input type="text" class="field-input full" id="edit-proc-custom-${idx}" value="${escAttr((c.procs||[]).filter(p => !procOptions.includes(p)).join(', '))}" placeholder="Custom procedures…" style="margin-top:8px;">
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+          <label class="field-label">What I wanted to learn / notes</label>
+          <textarea class="field-textarea full" id="edit-pearl-${idx}" rows="3">${esc(c.pearl || '')}</textarea>
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+          <label class="field-label">Drugs / doses</label>
+          <input type="text" class="field-input full" id="edit-drugs-${idx}" value="${escAttr(c.drugs || '')}">
+        </div>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+          <button class="btn-primary" onclick="App.saveCaseEdit(${idx})">Save changes</button>
+          <button class="btn-ghost" style="padding:8px 14px; border-radius:var(--radius-sm); cursor:pointer; color:var(--text-secondary);" onclick="App.cancelCaseEdit(${idx})">Cancel</button>
+        </div>
+      </div>`;
+  }
+
+  function saveCaseEdit(idx) {
+    const c = state.cases[idx];
+    if (!c) return;
+
+    const procOptions = ['RSI','Epidural','Spinal','CSE','Nerve block','A-line','Central line','TEE','Awake FOI','Video laryngoscopy','TIVA','Gas induction','LMA','Intubation','Arterial line','POCUS','Resuscitation','Transfusion'];
+
+    c.title = document.getElementById(`edit-title-${idx}`).value.trim() || c.title;
+    c.rotation = document.getElementById(`edit-rotation-${idx}`).value.trim();
+    c.date = document.getElementById(`edit-date-${idx}`).value.trim();
+    c.pearl = document.getElementById(`edit-pearl-${idx}`).value.trim();
+    c.drugs = document.getElementById(`edit-drugs-${idx}`).value.trim();
+
+    // Tags
+    const selectedTags = [];
+    document.querySelectorAll(`#case-row-${idx} .edit-tag-chip.selected`).forEach(el => selectedTags.push(el.dataset.tag));
+    c.tags = selectedTags;
+
+    // Procs — preset chips + custom field
+    const selectedProcs = [];
+    document.querySelectorAll(`#case-row-${idx} .edit-proc-chip.selected`).forEach(el => selectedProcs.push(el.dataset.proc));
+    const customProc = document.getElementById(`edit-proc-custom-${idx}`).value.trim();
+    if (customProc) customProc.split(',').map(p => p.trim()).filter(p => p && !selectedProcs.includes(p)).forEach(p => selectedProcs.push(p));
+    c.procs = selectedProcs;
+
+    saveCache();
+    renderCases();
+    toast('Case updated');
+  }
+
+  function cancelCaseEdit(idx) {
+    renderCases();
+    // Re-expand the row after re-render
+    const row = document.getElementById(`case-row-${idx}`);
+    if (row) row.classList.add('expanded');
+  }
+
+  async function deleteCase(idx) {
+    if (!confirm('Delete this case? This cannot be undone.')) return;
+    const c = state.cases[idx];
+    state.cases.splice(idx, 1);
+    renderAll();
+    saveCache();
+    toast('Case deleted');
+    if (c && c._id) { try { await deleteNotionPage(c._id); } catch {} }
   }
 
   function filterCaseRotation(val) { state.selectedCaseRotation = val; renderCases(); }
@@ -967,7 +1227,23 @@ const App = (() => {
     document.getElementById('ov-case-proc-custom').value = '';
     document.querySelectorAll('#ov-tag-picker .tag-pick-chip').forEach(c => c.classList.remove('selected'));
     document.querySelectorAll('#ov-proc-picker .proc-pick-chip').forEach(c => c.classList.remove('selected'));
+    // Reset day selector to today
+    const daySel = document.getElementById('case-day-select');
+    if (daySel) daySel.value = 'today';
+    setCaseDay('today');
     document.getElementById('case-overlay').classList.remove('hidden');
+  }
+
+  function setCaseDay(val) {
+    const today = new Date();
+    let d;
+    if (val === 'tomorrow') d = new Date(Date.now() + 86400000);
+    else if (val === 'yesterday') d = new Date(Date.now() - 86400000);
+    else d = today;
+    const label = d.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    document.getElementById('ov-case-date').value = label;
+    const title = document.getElementById('case-overlay-title');
+    if (title) title.textContent = val === 'today' ? "Log today's case" : val === 'tomorrow' ? "Log tomorrow's case" : "Log yesterday's case";
   }
 
   function closeCaseOverlay() {
@@ -1119,11 +1395,12 @@ const App = (() => {
     openGoalForm, openEPAForm, addGoal, toggleGoal,
     openBlockGoalForm, addBlockGoal, openPersonalGoalForm, addPersonalGoal,
     togglePersonalGoal, deferGoal, undefer,
-    setEPAView, logEPAByCode, filterEPAStage,
+    setEPAView, logEPAByCode, filterEPAStage, setTrainingStage,
     toggleCaseRow, filterCaseRotation, toggleCaseTag, toggleCaseProc,
+    openCaseEdit, saveCaseEdit, cancelCaseEdit, deleteCase, expandAndEditCase,
     openCaseOverlay, closeCaseOverlay, saveCaseFromOverlay,
     saveJournalEntry, viewPastEntry,
-    saveSettings, toggleHabit, updateWin, completeRequirement,
+    saveSettings, toggleHabit, updateWin, setWinsDate, setCaseDay, completeRequirement,
   };
 })();
 

@@ -11,6 +11,7 @@ const DB = {
   requirements: 'bbe0b489-2326-4134-8d6c-1630b5306419',
   cases:        'a93f5658-c3b4-4a64-a169-b02c0bdcc6d7',
   resources:    'dba0a69e-f476-4c52-b14a-70a01656f566',
+  dailyGoals:   'f668f443-33df-476c-accd-3735d2604ce1',
 };
 
 function notionHeaders() {
@@ -161,4 +162,40 @@ async function validateToken(token) {
     headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': NOTION_VERSION }
   });
   return r.ok;
+}
+
+// ── Daily Goals ──
+async function fetchDailyGoals() {
+  const pages = await queryDB(DB.dailyGoals);
+  return pages.map(p => ({
+    _id: p.id,
+    date: title(p.properties['Date']),
+    goal1: txt(p.properties['Goal 1']),
+    goal2: txt(p.properties['Goal 2']),
+    goal3: txt(p.properties['Goal 3']),
+    notes: txt(p.properties['Notes']),
+  })).filter(g => g.date);
+}
+
+async function createDailyGoal(entry) {
+  const page = await notionPost('/v1/pages', {
+    parent: { database_id: DB.dailyGoals },
+    properties: {
+      'Date':   { title: [{ text: { content: entry.date } }] },
+      'Goal 1': { rich_text: [{ text: { content: entry.wins[0] || '' } }] },
+      'Goal 2': { rich_text: [{ text: { content: entry.wins[1] || '' } }] },
+      'Goal 3': { rich_text: [{ text: { content: entry.wins[2] || '' } }] },
+    }
+  });
+  return page.id;
+}
+
+async function updateDailyGoal(notionId, entry) {
+  await notionPatch(`/v1/pages/${notionId}`, {
+    properties: {
+      'Goal 1': { rich_text: [{ text: { content: entry.wins[0] || '' } }] },
+      'Goal 2': { rich_text: [{ text: { content: entry.wins[1] || '' } }] },
+      'Goal 3': { rich_text: [{ text: { content: entry.wins[2] || '' } }] },
+    }
+  });
 }

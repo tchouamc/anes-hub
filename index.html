@@ -159,21 +159,32 @@
         </div>
 
         <div class="action-grid">
-          <div class="quick-add-card" onclick="App.openCaseOverlay()">
-            <div class="quick-add-top">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-              <h3>Log today's case</h3>
-              <p>Capture the case and what you want to learn from it before it slips away.</p>
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div class="quick-add-card" onclick="App.openCaseOverlay()">
+              <div class="quick-add-top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                <h3>Log a case</h3>
+                <p>Capture the case and what you want to learn from it before it slips away.</p>
+              </div>
+              <div class="quick-add-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                Add case
+              </div>
             </div>
-            <div class="quick-add-btn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-              Add case
-            </div>
+            <!-- Today's cases overview -->
+            <div id="dash-cases-today"></div>
           </div>
 
           <div class="wins-habit-stack">
             <div class="card wins-card">
-              <div class="card-label">3 things to win the clinical day</div>
+              <div class="card-label-row">
+                <span class="card-label" style="margin-bottom:0;">3 things to win the clinical day</span>
+                <select class="wins-date-select" id="wins-date-select" onchange="App.setWinsDate(this.value)">
+                  <option value="today">Today</option>
+                  <option value="tomorrow">Tomorrow</option>
+                </select>
+              </div>
+              <div class="wins-date-display" id="wins-date-display"></div>
               <div id="wins-list"></div>
             </div>
 
@@ -191,8 +202,9 @@
         </div>
 
         <div class="bottom-grid">
-          <div class="card">
-            <div class="card-label">Upcoming</div>
+          <!-- Diminished upcoming — compact, max 3 items -->
+          <div class="card" style="padding:16px 20px;">
+            <div class="card-label" style="margin-bottom:10px;">Upcoming</div>
             <div class="upcoming-list" id="upcoming-list"></div>
           </div>
 
@@ -505,19 +517,28 @@
             <div style="display:flex; align-items:center; gap:8px;">
               <span class="section-label" style="margin-bottom:0;">EPAs</span>
               <div class="epa-view-pills">
-                <button class="epa-view-pill active" id="pill-rotation" onclick="App.setEPAView('rotation')">This rotation</button>
+                <button class="epa-view-pill active" id="pill-rotation" onclick="App.setEPAView('rotation')">This stage</button>
                 <button class="epa-view-pill" id="pill-all" onclick="App.setEPAView('all')">All EPAs</button>
               </div>
             </div>
             <div class="epa-overall-badge" id="epa-overall-badge">— / — complete</div>
           </div>
 
-          <!-- THIS ROTATION VIEW -->
+          <!-- THIS STAGE VIEW -->
           <div id="epa-view-rotation">
+            <div class="epa-stage-selector-row">
+              <label class="epa-stage-selector-label">Current stage of training</label>
+              <select class="epa-stage-select" id="epa-stage-select" onchange="App.setTrainingStage(this.value)">
+                <option value="Transition to Discipline">Transition to Discipline (D1–D3)</option>
+                <option value="Foundations of Discipline">Foundations of Discipline (F1–F16)</option>
+                <option value="Core Discipline">Core Discipline (C1–C25)</option>
+                <option value="Transition to Practice">Transition to Practice (P1–P5)</option>
+              </select>
+            </div>
             <div class="epa-rotation-banner" id="epa-rotation-banner"></div>
             <div class="epa-counter-list" id="epa-list-rotation"></div>
             <div style="margin-top:12px; font-size:12px; color:var(--text-muted);">
-              Other EPAs logged this rotation appear below. Any EPA can be logged at any time — tap <strong>All EPAs</strong> to access the full list.
+              Showing EPAs for your selected stage. Any EPA can be logged at any time — tap <strong>All EPAs</strong> to access the full list.
             </div>
           </div>
 
@@ -691,7 +712,14 @@
 <!-- ════════ FULL SCREEN ADD-CASE OVERLAY ════════ -->
 <div class="overlay hidden" id="case-overlay">
   <div class="overlay-header">
-    <div class="overlay-title">Log today's case</div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="overlay-title" id="case-overlay-title">Log a case</div>
+      <select class="wins-date-select" id="case-day-select" onchange="App.setCaseDay(this.value)" style="font-size:13px; padding:6px 12px;">
+        <option value="today">Today</option>
+        <option value="tomorrow">Tomorrow</option>
+        <option value="yesterday">Yesterday</option>
+      </select>
+    </div>
     <div class="overlay-close" onclick="App.closeCaseOverlay()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </div>
