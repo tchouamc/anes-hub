@@ -182,7 +182,9 @@
                 <select class="wins-date-select" id="wins-date-select" onchange="App.setWinsDate(this.value)">
                   <option value="today">Today</option>
                   <option value="tomorrow">Tomorrow</option>
+                  <option value="custom">Custom date…</option>
                 </select>
+                <input type="text" class="wins-date-select datepicker-input hidden" id="wins-custom-date" placeholder="Pick a date…" readonly onclick="App.openDatePicker(this)" style="max-width:140px;">
               </div>
               <div class="wins-date-display" id="wins-date-display"></div>
               <div id="wins-list"></div>
@@ -300,11 +302,11 @@
             <div class="field-row">
               <div class="field-group">
                 <label class="field-label">Start date</label>
-                <input type="date" class="field-input full" id="rot-start">
+                <input type="text" class="field-input full datepicker-input" id="rot-start" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
               </div>
               <div class="field-group">
                 <label class="field-label">End date</label>
-                <input type="date" class="field-input full" id="rot-end">
+                <input type="text" class="field-input full datepicker-input" id="rot-end" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
               </div>
             </div>
           </div>
@@ -318,7 +320,7 @@
             <div class="field-row">
               <div class="field-group">
                 <label class="field-label">Date</label>
-                <input type="date" class="field-input full" id="acad-date">
+                <input type="text" class="field-input full datepicker-input" id="acad-date" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
               </div>
               <div class="field-group">
                 <label class="field-label">Time (optional)</label>
@@ -336,7 +338,7 @@
             <div class="field-row">
               <div class="field-group">
                 <label class="field-label">Date</label>
-                <input type="date" class="field-input full" id="call-date">
+                <input type="text" class="field-input full datepicker-input" id="call-date" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
               </div>
               <div class="field-group">
                 <label class="field-label">Type</label>
@@ -364,7 +366,7 @@
             <div class="field-row">
               <div class="field-group">
                 <label class="field-label">Due date</label>
-                <input type="date" class="field-input full" id="dl-date">
+                <input type="text" class="field-input full datepicker-input" id="dl-date" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
               </div>
               <div class="field-group">
                 <label class="field-label">Category</label>
@@ -383,7 +385,7 @@
           <div class="event-fields hidden" id="fields-OR">
             <div class="field-group">
               <label class="field-label">Date</label>
-              <input type="date" class="field-input full" id="or-date">
+              <input type="text" class="field-input full datepicker-input" id="or-date" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
             </div>
             <div class="field-row">
               <div class="field-group">
@@ -405,7 +407,7 @@
           <div class="event-fields hidden" id="fields-Note">
             <div class="field-group">
               <label class="field-label">Date</label>
-              <input type="date" class="field-input full" id="note-date">
+              <input type="text" class="field-input full datepicker-input" id="note-date" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
             </div>
             <div class="field-group">
               <label class="field-label">Note</label>
@@ -672,7 +674,7 @@
             </div>
             <div class="setting-row">
               <div><div class="setting-label">Residency start date</div><div class="setting-sub">Used to calculate your day count</div></div>
-              <input type="date" class="field-input" id="set-startdate">
+              <input type="text" class="field-input datepicker-input" id="set-startdate" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
             </div>
             <div class="setting-row">
               <div class="setting-label">Save changes</div>
@@ -736,7 +738,7 @@
       </div>
       <div class="field-group">
         <label class="field-label">Date</label>
-        <input type="text" class="field-input full" id="ov-case-date">
+        <input type="text" class="field-input full datepicker-input" id="ov-case-date" placeholder="Select date…" readonly onclick="App.openDatePicker(this)">
       </div>
     </div>
     <div class="field-group">
@@ -792,6 +794,29 @@
   <div class="overlay-footer">
     <div class="btn-ghost" onclick="App.closeCaseOverlay()">Cancel</div>
     <div class="btn-save" onclick="App.saveCaseFromOverlay()">Save case</div>
+  </div>
+</div>
+
+<!-- ════════ REUSABLE DATE PICKER ════════ -->
+<div class="datepicker-overlay hidden" id="datepicker-overlay" onclick="App.closeDatePicker(event)">
+  <div class="datepicker-popup" id="datepicker-popup" onclick="event.stopPropagation()">
+    <div class="datepicker-header">
+      <button class="datepicker-nav" onclick="App.datepickerPrevMonth()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="datepicker-month-label" id="datepicker-month-label"></span>
+      <button class="datepicker-nav" onclick="App.datepickerNextMonth()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <div class="datepicker-dows">
+      <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+    </div>
+    <div class="datepicker-grid" id="datepicker-grid"></div>
+    <div class="datepicker-footer">
+      <span class="datepicker-today-btn" onclick="App.datepickerSelectToday()">Today</span>
+      <span class="datepicker-clear-btn" onclick="App.closeDatePicker()">Cancel</span>
+    </div>
   </div>
 </div>
 

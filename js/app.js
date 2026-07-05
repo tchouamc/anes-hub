@@ -275,17 +275,26 @@ const App = (() => {
     const today = fmtDate(new Date());
     const tomorrow = fmtDate(new Date(Date.now() + 86400000));
     const sel = document.getElementById('wins-date-select');
-    const targetDate = sel && sel.value === 'tomorrow' ? tomorrow : today;
+    const selVal = sel ? sel.value : 'today';
+    let targetDate = today;
+    if (selVal === 'tomorrow') targetDate = tomorrow;
+    else if (selVal === 'custom') {
+      const customInput = document.getElementById('wins-custom-date');
+      if (customInput && customInput.value) {
+        const parsed = new Date(customInput.value);
+        if (!isNaN(parsed)) targetDate = fmtDate(parsed);
+      }
+    }
     if (!state.winsLog) state.winsLog = {};
     if (!state.winsLog[targetDate]) state.winsLog[targetDate] = { wins: ['', '', ''], notionId: null };
-    // Support both old array format and new object format
     const entry = state.winsLog[targetDate];
     const wins = Array.isArray(entry) ? entry : (entry.wins || ['', '', '']);
     state.dailyWins = { date: targetDate, wins };
     const display = document.getElementById('wins-date-display');
     if (display) {
-      const label = targetDate === today ? 'For today' : 'For tomorrow — ' + new Date(targetDate + 'T12:00:00').toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' });
-      display.textContent = label;
+      const d = new Date(targetDate + 'T12:00:00');
+      const formatted = d.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' });
+      display.textContent = targetDate === today ? 'For today' : 'For ' + formatted;
     }
     const el = document.getElementById('wins-list');
     if (!el) return;
@@ -298,7 +307,19 @@ const App = (() => {
   }
 
   function setWinsDate(val) {
-    renderWins();
+    const customInput = document.getElementById('wins-custom-date');
+    if (val === 'custom') {
+      if (customInput) {
+        customInput.classList.remove('hidden');
+        if (!customInput.value) {
+          customInput.value = new Date().toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        }
+        openDatePicker(customInput);
+      }
+    } else {
+      if (customInput) customInput.classList.add('hidden');
+      renderWins();
+    }
   }
 
   let winsSyncTimer;
@@ -306,7 +327,16 @@ const App = (() => {
     const sel = document.getElementById('wins-date-select');
     const today = fmtDate(new Date());
     const tomorrow = fmtDate(new Date(Date.now() + 86400000));
-    const targetDate = sel && sel.value === 'tomorrow' ? tomorrow : today;
+    const selVal = sel ? sel.value : 'today';
+    let targetDate = today;
+    if (selVal === 'tomorrow') targetDate = tomorrow;
+    else if (selVal === 'custom') {
+      const customInput = document.getElementById('wins-custom-date');
+      if (customInput && customInput.value) {
+        const parsed = new Date(customInput.value);
+        if (!isNaN(parsed)) targetDate = fmtDate(parsed);
+      }
+    }
     if (!state.winsLog) state.winsLog = {};
     if (!state.winsLog[targetDate]) state.winsLog[targetDate] = { wins: ['', '', ''], notionId: null };
     // Support both old array format and new object format
@@ -1240,8 +1270,9 @@ const App = (() => {
     if (val === 'tomorrow') d = new Date(Date.now() + 86400000);
     else if (val === 'yesterday') d = new Date(Date.now() - 86400000);
     else d = today;
-    const label = d.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
-    document.getElementById('ov-case-date').value = label;
+    const display = d.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const dateField = document.getElementById('ov-case-date');
+    if (dateField) dateField.value = display;
     const title = document.getElementById('case-overlay-title');
     if (title) title.textContent = val === 'today' ? "Log today's case" : val === 'tomorrow' ? "Log tomorrow's case" : "Log yesterday's case";
   }
@@ -1370,6 +1401,148 @@ const App = (() => {
     toast('Settings saved');
   }
 
+  // ════════ DATE PICKER ════════
+  let _dpTarget = null;   // the input field that opened the picker
+  let _dpMonth = new Date().getMonth();
+  let _dpYear = new Date().getFullYear();
+  let _dpSelected = null; // ISO date string currently selected
+
+  function openDatePicker(inputEl) {
+    _dpTarget = inputEl;
+    // Parse existing value to pre-select
+    const existing = inputEl.value;
+    const parsed = existing ? new Date(existing) : null;
+    if (parsed && !isNaN(parsed)) {
+      _dpSelected = fmtDate(parsed);
+      _dpMonth = parsed.getMonth();
+      _dpYear = parsed.getFullYear();
+    } else {
+      _dpSelected = null;
+      const now = new Date();
+      _dpMonth = now.getMonth();
+      _dpYear = now.getFullYear();
+    }
+    // Position popup near the input
+    const overlay = document.getElementById('datepicker-overlay');
+    const popup = document.getElementById('datepicker-popup');
+    overlay.classList.remove('hidden');
+    // Position below input
+    const rect = inputEl.getBoundingClientRect();
+    const top = Math.min(rect.bottom + 6, window.innerHeight - 320);
+    const left = Math.min(rect.left, window.innerWidth - 296);
+    popup.style.top = Math.max(top, 8) + 'px';
+    popup.style.left = Math.max(left, 8) + 'px';
+    renderDatePicker();
+  }
+
+  function closeDatePicker(e) {
+    if (e && e.target !== document.getElementById('datepicker-overlay')) return;
+    document.getElementById('datepicker-overlay').classList.add('hidden');
+    _dpTarget = null;
+  }
+
+  function datepickerPrevMonth() {
+    _dpMonth--;
+    if (_dpMonth < 0) { _dpMonth = 11; _dpYear--; }
+    renderDatePicker();
+  }
+
+  function datepickerNextMonth() {
+    _dpMonth++;
+    if (_dpMonth > 11) { _dpMonth = 0; _dpYear++; }
+    renderDatePicker();
+  }
+
+  function datepickerSelectToday() {
+    const today = fmtDate(new Date());
+    _dpSelected = today;
+    _dpMonth = new Date().getMonth();
+    _dpYear = new Date().getFullYear();
+    applyDateSelection(today);
+    renderDatePicker();
+    document.getElementById('datepicker-overlay').classList.add('hidden');
+  }
+
+  function datepickerSelectDay(dateStr, isMuted) {
+    if (isMuted) return;
+    _dpSelected = dateStr;
+    applyDateSelection(dateStr);
+    renderDatePicker();
+    // Small delay so user sees the selection highlight before closing
+    setTimeout(() => {
+      document.getElementById('datepicker-overlay').classList.add('hidden');
+    }, 180);
+  }
+
+  function applyDateSelection(isoDate) {
+    if (!_dpTarget) return;
+    // Format nicely for display
+    const d = new Date(isoDate + 'T12:00:00');
+    const display = d.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    _dpTarget.value = display;
+    // Trigger any onchange callbacks the field might have
+    _dpTarget.dispatchEvent(new Event('change', { bubbles: true }));
+    // Special handling for known fields
+    const id = _dpTarget.id;
+    if (id === 'ov-case-date') {
+      // Update the overlay title based on relation to today
+      const today = fmtDate(new Date());
+      const tomorrow = fmtDate(new Date(Date.now() + 86400000));
+      const yesterday = fmtDate(new Date(Date.now() - 86400000));
+      const titleEl = document.getElementById('case-overlay-title');
+      if (titleEl) {
+        if (isoDate === today) titleEl.textContent = "Log today's case";
+        else if (isoDate === tomorrow) titleEl.textContent = "Log tomorrow's case";
+        else if (isoDate === yesterday) titleEl.textContent = "Log yesterday's case";
+        else titleEl.textContent = "Log a case — " + d.toLocaleDateString('default', { month: 'short', day: 'numeric' });
+      }
+      // Sync case-day-select dropdown
+      const sel = document.getElementById('case-day-select');
+      if (sel) sel.value = isoDate === tomorrow ? 'tomorrow' : isoDate === yesterday ? 'yesterday' : 'today';
+    }
+    if (id === 'set-startdate') {
+      state.startDate = isoDate;
+      saveCache();
+      renderDashboard();
+    }
+    if (id === 'wins-custom-date') {
+      // Re-render wins with the newly selected custom date
+      renderWins();
+    }
+  }
+
+  function renderDatePicker() {
+    const label = new Date(_dpYear, _dpMonth, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+    document.getElementById('datepicker-month-label').textContent = label;
+    const today = fmtDate(new Date());
+    const grid = document.getElementById('datepicker-grid');
+    const first = new Date(_dpYear, _dpMonth, 1);
+    const startOffset = first.getDay();
+    const daysInMonth = new Date(_dpYear, _dpMonth + 1, 0).getDate();
+    let html = '';
+    // Leading muted days from prev month
+    const prevDays = new Date(_dpYear, _dpMonth, 0).getDate();
+    for (let i = startOffset - 1; i >= 0; i--) {
+      html += `<div class="dp-day muted">${prevDays - i}</div>`;
+    }
+    // Current month days
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(_dpYear, _dpMonth, day);
+      const dStr = fmtDate(d);
+      const isToday = dStr === today;
+      const isSelected = dStr === _dpSelected;
+      const cls = ['dp-day', isToday ? 'today' : '', isSelected ? 'selected' : ''].filter(Boolean).join(' ');
+      html += `<div class="${cls}" onclick="App.datepickerSelectDay('${dStr}', false)">${day}</div>`;
+    }
+    // Trailing muted days
+    const total = startOffset + daysInMonth;
+    const trailing = (7 - (total % 7)) % 7;
+    for (let i = 1; i <= trailing; i++) {
+      html += `<div class="dp-day muted">${i}</div>`;
+    }
+    grid.innerHTML = html;
+  }
+
   // ── Helpers ──
   let toastTimer;
   function toast(msg) {
@@ -1400,6 +1573,9 @@ const App = (() => {
     openCaseEdit, saveCaseEdit, cancelCaseEdit, deleteCase, expandAndEditCase,
     openCaseOverlay, closeCaseOverlay, saveCaseFromOverlay,
     saveJournalEntry, viewPastEntry,
+    openDatePicker, closeDatePicker,
+    datepickerPrevMonth, datepickerNextMonth,
+    datepickerSelectToday, datepickerSelectDay,
     saveSettings, toggleHabit, updateWin, setWinsDate, setCaseDay, completeRequirement,
   };
 })();
